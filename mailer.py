@@ -5,6 +5,7 @@ import pickle
 import re
 import sys
 import unicodedata
+from urllib3.exceptions import ReadTimeoutError
 
 from bs4 import BeautifulSoup
 import feedparser
@@ -253,7 +254,10 @@ def main():
     # all warmed up
     if not demo_mode:
         for post in posts:
-            requests.get(f"https://www.arxiv-vanity.com/papers/{post['arxiv_id']}/", timeout=5)
+            try:
+                requests.get(f"https://www.arxiv-vanity.com/papers/{post['arxiv_id']}/", timeout=5)
+            except ReadTimeoutError:
+                pass
 
 if __name__ == "__main__":
     main()
