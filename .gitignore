@@ -1,0 +1,6 @@
+mailing.eml
+mailing.html
+mailing.txt
+__pycache__
+.ipynb_checkpoints
+.pytest_cache

@@ -1,0 +1,14 @@
+Good morning!
+
+This is the StewarXiv bot running at {{ run_time }} UTC. Today's astro-ph arXiv update includes {% if posts|count == 1 %}one post{% else %}{{ posts|count }} posts{% endif %} featuring {{ all_authors|count }} of your colleagues.
+{% for post in posts %}
+---
+
+[{{post.area[0]}}.{{post.area[1]}}]
+{{ post.title }}
+  https://arxiv.org/abs/{{ post.arxiv_id }} | PDF: https://arxiv.org/pdf/{{ post.arxiv_id }}
+
+{% for author in post.authors %}{{ author[0] }}{% if author[1][0] %} (SO){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}
+
+{{ post.abstract }}
+{% endfor %}

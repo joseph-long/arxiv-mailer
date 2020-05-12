@@ -1,0 +1,49 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html>
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    </head>
+    {% set font_size_reg = 16 %}
+    <body style="font-family: sans-serif; font-size: {{ font_size_reg }}px; line-height: {{ 1.25 * font_size_reg }}px;">
+    {% set button_styles = "display: inline-block; box-sizing: border-box; border: 1px solid transparent; padding: 3px 6px;" %}
+    <p>Good morning! This is the StewarXiv bot running at {{ run_time }}.</p>
+    <p>Today's astro-ph arXiv update includes {% if posts|count == 1 %}one post{% else %}{{ posts|count }} posts{% endif %} featuring {{ all_authors|count }} of your colleagues.</p>
+
+    {% for post in posts %}
+    {% set area = post.area[1] %}
+    {% if area == "GA" %}
+    {% set area_desc = "Galaxies" %}
+    {% set area_color = "#4664AE" %}
+    {% elif area == "CO" %}
+    {% set area_desc = "Cosmology" %}
+    {% set area_color = "#2FC0F1" %}
+    {% elif area == "EP" %}
+    {% set area_desc = "Earth & Planetary" %}
+    {% set area_color = "#F15B2B" %}
+    {% elif area == "HE" %}
+    {% set area_desc = "High Energy" %}
+    {% set area_color = "#C0D730" %}
+    {% elif area == "IM" %}
+    {% set area_desc = "Instrumentation & Methods" %}
+    {% set area_color = "#6CC7BB" %}
+    {% elif area == "SR" %}
+    {% set area_desc = "Solar & Stellar" %}
+    {% set area_color = "#EE2E2D" %}
+    {% endif %}
+    <hr>
+    <h1 style="font-size: {{ font_size_reg }}px;"><a href="https://arxiv.org/abs/{{ post.arxiv_id }}">{{ post.title }}</a></h1>
+    <h2 style="font-size: {{ font_size_reg - 4}}px; font-weight: normal;">
+    <a href="https://arxiv.org/list/astro-ph.{{ area }}/recent" style="{{ button_styles }} color: white; background-color: {{ area_color }};">{{ area_desc }}</a>
+        <a href="https://arxiv.org/pdf/{{ post.arxiv_id }}" style="{{ button_styles }} border-color: {{ area_color }}; color: {{ area_color }}; background: #eee;">View PDF</a>
+        <a href="https://www.arxiv-vanity.com/papers/{{ post.arxiv_id }}/" style="{{ button_styles }} border-color: black; border-color: {{ area_color }}; color: {{ area_color }}; background: #eee;">Reformat for web</a>
+    </h2>
+    <h2 style="font-weight: normal; font-size: {{ font_size_reg - 2}}px; line-height: {{ 2 * font_size_reg }}px;">
+        {% for author in post.authors %}
+        {% include "author.jinja2.html" %}{% if not loop.last %},{% endif %}
+        {% endfor %}
+    </h2>
+    <p style="font-style: italic; font-size: {{ font_size_reg - 2}}px; word-wrap: break-word; text-align: justify;">{{ post.abstract }}</p>
+    {% endfor %}
+    </body>
+</html>

@@ -1,0 +1,20 @@
+{% if area == "GA" %}
+{% set longdesc = "Galaxies" %}
+{% set color = "#4664AE" %}
+{% elif area == "CO" %}
+{% set longdesc = "Cosmology" %}
+{% set color = "#2FC0F1" %}
+{% elif area == "EP" %}
+{% set longdesc = "Earth & Planetary" %}
+{% set color = "#F15B2B" %}
+{% elif area == "HE" %}
+{% set longdesc = "High Energy" %}
+{% set color = "#C0D730" %}
+{% elif area == "IM" %}
+{% set longdesc = "Instrumentation & Methods" %}
+{% set color = "#6CC7BB" %}
+{% elif area == "SR" %}
+{% set longdesc = "Solar & Stellar" %}
+{% set color = "#EE2E2D" %}
+{% endif %}
+<span style="{{ button_styles }} color: white; background: {{ color }};">{{ longdesc }}</span>
