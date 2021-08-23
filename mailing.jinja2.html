@@ -7,7 +7,6 @@
     {% set font_size_reg = 16 %}
     <body style="font-family: sans-serif; font-size: {{ font_size_reg }}px; line-height: {{ 1.25 * font_size_reg }}px;">
     {% set button_styles = "display: inline-block; box-sizing: border-box; border: 1px solid transparent; padding: 3px 6px;" %}
-    <p>Good morning! This is the StewarXiv bot running at {{ run_time }}.</p>
     <p>Today's astro-ph arXiv update includes {% if posts|count == 1 %}one post{% else %}{{ posts|count }} posts{% endif %} featuring {{ all_authors|count }} of your colleagues.</p>
 
     {% for post in posts %}
@@ -38,12 +37,14 @@
         <a href="https://arxiv.org/pdf/{{ post.arxiv_id }}" style="{{ button_styles }} border-color: {{ area_color }}; color: {{ area_color }}; background: #eee;">View PDF</a>
         <a href="https://www.arxiv-vanity.com/papers/{{ post.arxiv_id }}/" style="{{ button_styles }} border-color: black; border-color: {{ area_color }}; color: {{ area_color }}; background: #eee;">Reformat for web</a>
     </h2>
-    <h2 style="font-weight: normal; font-size: {{ font_size_reg - 2}}px; line-height: {{ 2 * font_size_reg }}px;">
+    <h2 style="font-weight: normal; font-size: {{ font_size_reg - 2}}px;">
         {% for author in post.authors %}
         {% include "author.jinja2.html" %}{% if not loop.last %},{% endif %}
         {% endfor %}
     </h2>
-    <p style="font-style: italic; font-size: {{ font_size_reg - 2}}px; word-wrap: break-word; text-align: justify;">{{ post.abstract }}</p>
+    <p style="font-style: italic; font-size: {{ font_size_reg - 2}}px; word-wrap: break-word; text-align: justify; line-height: {{ font_size_reg - 1 }}px;">{{ post.abstract }}</p>
     {% endfor %}
+    <hr>
+    <p style="font-size: {{ font_size_reg - 4}}px; font-weight: normal; color: #444;">Generated at {{ run_time }}. Adjust options or unsubscribe at <a href="https://list.arizona.edu/sympa/info/astro-stewarxiv">https://list.arizona.edu/sympa/info/astro-stewarxiv</a>.</p>
     </body>
 </html>

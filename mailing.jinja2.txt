@@ -1,6 +1,4 @@
-Good morning!
-
-This is the StewarXiv bot running at {{ run_time }} UTC. Today's astro-ph arXiv update includes {% if posts|count == 1 %}one post{% else %}{{ posts|count }} posts{% endif %} featuring {{ all_authors|count }} of your colleagues.
+Today's astro-ph arXiv update includes {% if posts|count == 1 %}one post{% else %}{{ posts|count }} posts{% endif %} featuring {{ all_authors|count }} of your colleagues.
 {% for post in posts %}
 ---
 
@@ -12,3 +10,6 @@ This is the StewarXiv bot running at {{ run_time }} UTC. Today's astro-ph arXiv 
 
 {{ post.abstract }}
 {% endfor %}
+
+---
+Generated at {{ run_time }}. Adjust options or unsubscribe at https://list.arizona.edu/sympa/info/astro-stewarxiv .

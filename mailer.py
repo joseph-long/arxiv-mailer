@@ -1,16 +1,29 @@
 #!/usr/bin/env python
 import datetime
+import os
 import os.path
 import pickle
 import re
+import logging
 import sys
 import unicodedata
 from urllib3.exceptions import ReadTimeoutError
-
+import smtplib
+import ssl
+# https://stackoverflow.com/questions/33857698/sending-email-from-python-using-starttls
+_DEFAULT_CIPHERS = (
+    'ECDH+AESGCM:DH+AESGCM:ECDH+AES256:DH+AES256:ECDH+AES128:DH+AES:ECDH+HIGH:'
+    'DH+HIGH:ECDH+3DES:DH+3DES:RSA+AESGCM:RSA+AES:RSA+HIGH:RSA+3DES:!aNULL:'
+    '!eNULL:!MD5'
+)
+from dateutil.parser import parse
+from dateutil import tz
 from bs4 import BeautifulSoup
 import feedparser
 import jinja2
 import requests
+
+log = logging.getLogger(__name__)
 
 def soupify(url):
     import warnings
@@ -42,9 +55,13 @@ def build_directory():
     postdoc_page = soupify('https://www.as.arizona.edu/people/postdoctoral')
     for wrap in postdoc_page.select('.view-people tr'):
         name_parts = tuple(normalize_caseless(part.strip()) for part in wrap.select_one('h4').text.split(',', 1))
+        if wrap.select_one('h5') is not None:
+            position = wrap.select_one('h5').text
+        else:
+            position = ''
         people[name_parts] = {
             'role': POSTDOC,
-            'position': wrap.select_one('h5').text,
+            'position': position,
             'image': wrap.select_one('img')['src'].rsplit('?', 1)[0]
         }
 
@@ -153,9 +170,14 @@ def unpack_feed_entry(post, people):
     return out
 
 def get_matching_posts(people):
-    feed = feedparser.parse('http://arxiv.org/rss/astro-ph')
+    feed = feedparser.parse('https://arxiv.org/rss/astro-ph')
     posts = []
     all_authors = []
+    update_day = parse(feed.feed['updated']).astimezone(datetime.timezone.utc).date()
+    today = datetime.datetime.now(datetime.timezone.utc).date()
+    if (update_day - today).days != 0:
+        log.warn(f"Mailer was invoked but feed was last updated on {update_day} UTC")
+        sys.exit(1)
     for post in feed.entries:
         unpacked_post = unpack_feed_entry(post, people)
         if unpacked_post:
@@ -196,15 +218,29 @@ def compose_email(from_address, to_addresses, subject, html_mailing, text_mailin
         f.write(bytes(msg))
     return msg
 
-import smtplib
-
 def send_email(msg):
-    with smtplib.SMTP('localhost') as s:
-        s.send_message(msg)
+    host = os.environ['MAIL_SERVER']
+    port = int(os.environ['MAIL_PORT'])
+    user = os.environ['MAIL_USERNAME']
+    password = os.environ['MAIL_PASSWORD']
+
+    # only TLSv1 or higher
+    context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+    context.options |= ssl.OP_NO_SSLv2
+    context.options |= ssl.OP_NO_SSLv3
+
+    context.set_ciphers(_DEFAULT_CIPHERS)
+    context.set_default_verify_paths()
+    context.verify_mode = ssl.CERT_REQUIRED
+    smtp_server = smtplib.SMTP_SSL(host, port=port, context=context)
+    smtp_server.login(user, password)
+    smtp_server.send_message(msg)
 
 def main():
     demo_mode = False
-    run_time = datetime.datetime.utcnow()
+    run_time = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc)
+    tzmst = tz.gettz('America/Phoenix')
+    run_time_local = run_time.astimezone(tzmst)
 
     if len(sys.argv) > 1:
         args = sys.argv[1:]
@@ -226,7 +262,7 @@ def main():
             'people': people,
             'posts': posts,
             'all_authors': all_authors,
-            'run_time': run_time,
+            'run_time': run_time_local.strftime('%Y-%m-%d %H:%M %Z'),
         }
         if demo_mode:
             with open('./demo.pickle', 'wb') as f:
@@ -239,16 +275,17 @@ def main():
         f.write(text_mailing)
 
     # Compose the email
-    from_addr = Address("StewarXiv", "josephlong", "email.arizona.edu")
+    from_addr_spec = os.environ['MAIL_USERNAME']
+    from_addr = Address("StewarXiv", addr_spec=from_addr_spec)
+    to_addr_spec = os.environ['MAIL_SENDTO']
     to_addrs = [
-        Address("Joseph Long", "josephlong", "email.arizona.edu")
+        Address("StewarXiv", addr_spec=to_addr_spec)
     ]
-    subject = f'StewarXiv update: {len(posts)} {"post" if len(posts) == 1 else "posts"} from {len(all_authors)} {"colleague" if len(all_authors) == 1 else "colleagues"}'
-    compose_email(from_addr, to_addrs, subject, html_mailing, text_mailing)
+    subject = f'Today\'s update: {len(posts)} {"post" if len(posts) == 1 else "posts"} from {len(all_authors)} {"colleague" if len(all_authors) == 1 else "colleagues"}'
+    msg = compose_email(from_addr, to_addrs, subject, html_mailing, text_mailing)
     # Send the email
     if not demo_mode:
-        # TODO
-        pass
+        send_email(msg)
 
     # Finally: hit the arxiv-vanity URL for each paper so their cache is
     # all warmed up
@@ -260,4 +297,6 @@ def main():
                 pass
 
 if __name__ == "__main__":
+    logging.basicConfig(level='WARN')
+    log.setLevel('DEBUG')
     main()
