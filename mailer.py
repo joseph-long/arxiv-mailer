@@ -7,7 +7,7 @@ import re
 import logging
 import sys
 import unicodedata
-from urllib3.exceptions import ReadTimeoutError
+from requests.exceptions import ReadTimeout
 import smtplib
 import ssl
 # https://stackoverflow.com/questions/33857698/sending-email-from-python-using-starttls
@@ -37,8 +37,11 @@ POSTDOC = 2
 STUDENT = 3
 
 def normalize_caseless(text):
+    text = re.sub(r'[^\w]', ' ', text)
     # thanks to https://stackoverflow.com/a/29247821
-    return unicodedata.normalize("NFKD", text.casefold())
+    text = unicodedata.normalize("NFKD", text.casefold())
+    text = text.strip()
+    return text
 
 def build_directory():
     people = {}
@@ -97,9 +100,11 @@ def test_strip_initials():
 
 def approximate_name_lookup(name, people):
     # normalize at input boundary so comparisons are simply ==
-    name_match = NAME_RE.match(normalize_caseless(name.strip()))
+    normalized_name = normalize_caseless(name)
+    name_match = NAME_RE.match(normalized_name)
     if not name_match:
-        raise ValueError(f"Unable to parse {name} with regex")
+        log.warn(f"Unable to parse {normalized_name=} with regex")
+        return None, 0
     parts = name_match.groupdict()
     first_names = parts['first'].strip()
     first_initial = parts['initial']
@@ -140,17 +145,20 @@ def test_approximate_name_lookup():
         ('dave', 'a. bob c.'): None,
         ('ferris', 'edgar'): None,
         ('hausschuh', 'georgina'): None,
+        ('rodrigo', 'marco navarro'): None
     }
     assert approximate_name_lookup('edgar ferris', people) == (('ferris', 'edgar'), 2)
     assert approximate_name_lookup('bob dave', people) == (('dave', 'a. bob c.'), 2)
     assert approximate_name_lookup('G. Hausschuh', people) == (('hausschuh', 'georgina'), 1)
+    assert approximate_name_lookup('{M. Navarro Rodrigo}', people) == (('rodrigo', 'marco navarro'), 1)
 
 def unpack_feed_entry(post, people):
     title, arxiv_id_ext, arxiv_area, update_kind = re.match(r'^(.+) \(arXiv:(.+) \[(.+)\](.*)\)', post.title).groups()
     if len(update_kind):
         # no 'UPDATED' posts, just new stuff please
         return
-    authors = [(x.text, approximate_name_lookup(x.text, people)) for x in BeautifulSoup(post.author, features="lxml").select('a')]
+    author_names = [x.text for x in BeautifulSoup(post.author, features="lxml").select('a')]
+    authors = [(name, approximate_name_lookup(name, people)) for name in author_names]
     our_people_score = sum(item[1][1] for item in authors)
     if not our_people_score > 1:
         # If only one partial match was found, it's probably not who we think it is.
@@ -275,13 +283,13 @@ def main():
         f.write(text_mailing)
 
     # Compose the email
-    from_addr_spec = os.environ['MAIL_USERNAME']
+    from_addr_spec = os.environ['MAIL_USERNAME'] if not demo_mode else 'astro-stewarxiv@list.arizona.edu'
     from_addr = Address("StewarXiv", addr_spec=from_addr_spec)
-    to_addr_spec = os.environ['MAIL_SENDTO']
+    to_addr_spec = os.environ['MAIL_SENDTO'] if not demo_mode else 'astro-stewarxiv@list.arizona.edu'
     to_addrs = [
         Address("StewarXiv", addr_spec=to_addr_spec)
     ]
-    subject = f'Today\'s update: {len(posts)} {"post" if len(posts) == 1 else "posts"} from {len(all_authors)} {"colleague" if len(all_authors) == 1 else "colleagues"}'
+    subject = f'Today\'s update: {len(posts)} {"preprint" if len(posts) == 1 else "preprints"} from {len(all_authors)} {"colleague" if len(all_authors) == 1 else "colleagues"}'
     msg = compose_email(from_addr, to_addrs, subject, html_mailing, text_mailing)
     # Send the email
     if not demo_mode:
@@ -293,7 +301,7 @@ def main():
         for post in posts:
             try:
                 requests.get(f"https://www.arxiv-vanity.com/papers/{post['arxiv_id']}/", timeout=5)
-            except ReadTimeoutError:
+            except ReadTimeout:
                 pass
 
 if __name__ == "__main__":
