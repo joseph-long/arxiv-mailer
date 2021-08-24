@@ -24,6 +24,7 @@ import jinja2
 import requests
 
 log = logging.getLogger(__name__)
+DEMO_MODE = False
 
 def soupify(url):
     import warnings
@@ -222,8 +223,9 @@ def compose_email(from_address, to_addresses, subject, html_mailing, text_mailin
     msg['To'] = to_addresses
     msg.set_content(text_mailing)
     msg.add_alternative(html_mailing, subtype='html')
-    with open('mailing.eml', 'wb') as f:
-        f.write(bytes(msg))
+    if DEMO_MODE:
+        with open('mailing.eml', 'wb') as f:
+            f.write(bytes(msg))
     return msg
 
 def send_email(msg):
@@ -245,7 +247,7 @@ def send_email(msg):
     smtp_server.send_message(msg)
 
 def main():
-    demo_mode = False
+    global DEMO_MODE
     run_time = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc)
     tzmst = tz.gettz('America/Phoenix')
     run_time_local = run_time.astimezone(tzmst)
@@ -253,8 +255,8 @@ def main():
     if len(sys.argv) > 1:
         args = sys.argv[1:]
         if '-d' in args:
-            demo_mode = True
-    if demo_mode and os.path.exists('./demo.pickle'):
+            DEMO_MODE = True
+    if DEMO_MODE and os.path.exists('./demo.pickle'):
         with open('./demo.pickle', 'rb') as f:
             context = pickle.load(f)
             # define locals from pickle
@@ -272,32 +274,33 @@ def main():
             'all_authors': all_authors,
             'run_time': run_time_local.strftime('%Y-%m-%d %H:%M %Z'),
         }
-        if demo_mode:
+        if DEMO_MODE:
             with open('./demo.pickle', 'wb') as f:
                 pickle.dump(context, f)
     
     html_mailing, text_mailing = render_mailing(context)
-    with open('./mailing.html', 'w') as f:
-        f.write(html_mailing)
-    with open('./mailing.txt', 'w') as f:
-        f.write(text_mailing)
+    if DEMO_MODE:
+        with open('./mailing.html', 'w') as f:
+            f.write(html_mailing)
+        with open('./mailing.txt', 'w') as f:
+            f.write(text_mailing)
 
     # Compose the email
-    from_addr_spec = os.environ['MAIL_USERNAME'] if not demo_mode else 'astro-stewarxiv@list.arizona.edu'
+    from_addr_spec = os.environ['MAIL_USERNAME'] if not DEMO_MODE else 'astro-stewarxiv@list.arizona.edu'
     from_addr = Address("StewarXiv", addr_spec=from_addr_spec)
-    to_addr_spec = os.environ['MAIL_SENDTO'] if not demo_mode else 'astro-stewarxiv@list.arizona.edu'
+    to_addr_spec = os.environ['MAIL_SENDTO'] if not DEMO_MODE else 'astro-stewarxiv@list.arizona.edu'
     to_addrs = [
         Address("StewarXiv", addr_spec=to_addr_spec)
     ]
     subject = f'Today\'s update: {len(posts)} {"preprint" if len(posts) == 1 else "preprints"} from {len(all_authors)} {"colleague" if len(all_authors) == 1 else "colleagues"}'
     msg = compose_email(from_addr, to_addrs, subject, html_mailing, text_mailing)
     # Send the email
-    if not demo_mode:
+    if not DEMO_MODE:
         send_email(msg)
 
     # Finally: hit the arxiv-vanity URL for each paper so their cache is
     # all warmed up
-    if not demo_mode:
+    if not DEMO_MODE:
         for post in posts:
             try:
                 requests.get(f"https://www.arxiv-vanity.com/papers/{post['arxiv_id']}/", timeout=5)
