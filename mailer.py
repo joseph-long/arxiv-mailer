@@ -26,6 +26,8 @@ import requests
 log = logging.getLogger(__name__)
 DEMO_MODE = False
 
+HERE = os.path.dirname(__file__)
+
 def soupify(url):
     import warnings
     with warnings.catch_warnings():
@@ -280,9 +282,9 @@ def main():
     
     html_mailing, text_mailing = render_mailing(context)
     if DEMO_MODE:
-        with open('./mailing.html', 'w') as f:
+        with open(os.path.join(HERE, 'mailing.html'), 'w') as f:
             f.write(html_mailing)
-        with open('./mailing.txt', 'w') as f:
+        with open(os.path.join(HERE, 'mailing.txt'), 'w') as f:
             f.write(text_mailing)
 
     # Compose the email
