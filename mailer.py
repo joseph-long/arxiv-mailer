@@ -22,6 +22,8 @@ from bs4 import BeautifulSoup
 import feedparser
 import jinja2
 import requests
+import tarfile
+import io
 
 log = logging.getLogger(__name__)
 DEMO_MODE = False
@@ -38,6 +40,28 @@ def soupify(url):
 FACULTY = 1
 POSTDOC = 2
 STUDENT = 3
+
+
+def gather_affiliation_evidence(arxiv_id):
+    url = f'https://arxiv.org/e-print/{arxiv_id}'
+    evidence = 0
+    try:
+        res = requests.get(url)
+        buff = io.BytesIO(res.content)
+        archive = tarfile.open(fileobj=buff)
+        texfiles = [m for m in archive.getmembers() if m.name.lower().endswith('.tex')]
+
+        UOFA_RE = re.compile(r'(university of arizona|steward observatory|arizona\.edu|lbto\.org|gmto\.org)', flags=re.IGNORECASE)
+
+        for info in texfiles:
+            fh = archive.extractfile(info)
+            contents = fh.read().decode('utf8')
+            matches = UOFA_RE.findall(contents)
+            evidence += len(matches)
+    except Exception as e:
+        log.debug(e)
+    return evidence
+
 
 def normalize_caseless(text):
     text = re.sub(r'[^\w]', ' ', text)
@@ -74,9 +98,10 @@ def build_directory():
     student_page = soupify('https://www.as.arizona.edu/people/grad_students')
     for wrap in student_page.select('.view-people tr'):
         first_names, last_name = tuple(normalize_caseless(part.strip()) for part in wrap.select_one('h4').text.rsplit(' ', 1))
+        past_degrees = wrap.select_one('h5')
         people[(last_name, first_names)] = {
             'role': STUDENT,
-            'position': wrap.select_one('h5').text,
+            'position': past_degrees.text if past_degrees is not None else '',
             'image': wrap.select_one('img')['src'].rsplit('?', 1)[0]
         }
     return people
@@ -112,7 +137,7 @@ def approximate_name_lookup(name, people):
     first_names = parts['first'].strip()
     first_initial = parts['initial']
     last_name = parts['last'].strip()
-    
+
     for person_last, person_first in people:
         score = 0
         if person_last == last_name:
@@ -155,6 +180,30 @@ def test_approximate_name_lookup():
     assert approximate_name_lookup('G. Hausschuh', people) == (('hausschuh', 'georgina'), 1)
     assert approximate_name_lookup('{M. Navarro Rodrigo}', people) == (('rodrigo', 'marco navarro'), 1)
 
+UOFA_RE = re.compile(r'(university of arizona|steward observatory|arizona\.edu|lbto\.org|gmto\.org)', flags=re.IGNORECASE)
+
+def gather_affiliation_evidence(arxiv_id):
+    url = f'https://arxiv.org/e-print/{arxiv_id}'
+    evidence = 0
+    gather_success = False
+    try:
+        log.debug(f"Gathering evidence from {url}")
+        res = requests.get(url)
+        buff = io.BytesIO(res.content)
+        archive = tarfile.open(fileobj=buff)
+        texfiles = [m for m in archive.getmembers() if m.name.lower().endswith('.tex')]
+
+        for info in texfiles:
+            fh = archive.extractfile(info)
+            contents = fh.read().decode('utf8')
+            matches = UOFA_RE.findall(contents)
+            evidence += len(matches)
+        gather_success = True
+    except Exception as e:
+        log.debug(e)
+    return evidence, gather_success
+
+
 def unpack_feed_entry(post, people):
     title, arxiv_id_ext, arxiv_area, update_kind = re.match(r'^(.+) \(arXiv:(.+) \[(.+)\](.*)\)', post.title).groups()
     if len(update_kind):
@@ -163,12 +212,16 @@ def unpack_feed_entry(post, people):
     author_names = [x.text for x in BeautifulSoup(post.author, features="lxml").select('a')]
     authors = [(name, approximate_name_lookup(name, people)) for name in author_names]
     our_people_score = sum(item[1][1] for item in authors)
-    if not our_people_score > 1:
-        # If only one partial match was found, it's probably not who we think it is.
-        # (Multiple first initial + last name matches or a single full name match
-        # are sufficient to keep a post.)
+    if our_people_score < 1:
         return
+
     arxiv_id = post.link.rsplit('/', 1)[1]
+    evidence, gather_success = gather_affiliation_evidence(arxiv_id)
+    if gather_success and evidence == 0:
+        log.debug(f'Skipping {arxiv_id=} for lack of evidence: {our_people_score=} {evidence=}')
+        return  # no matches to UOFA_RE
+    elif not gather_success and our_people_score < 2:
+        return  # could be two partial matches
     abstract = BeautifulSoup(post.summary, features="lxml").text
     arxiv_area = arxiv_area.rsplit('.', 1)
     out = {
@@ -253,6 +306,7 @@ def main():
     run_time = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc)
     tzmst = tz.gettz('America/Phoenix')
     run_time_local = run_time.astimezone(tzmst)
+    day_of_week = run_time_local.strftime('%A')
 
     if len(sys.argv) > 1:
         args = sys.argv[1:]
@@ -266,7 +320,8 @@ def main():
             posts = context['posts']
             all_authors = context['all_authors']
             # except run_time, update that in loaded dict
-            context['run_time'] = run_time
+            context['run_time'] = run_time_local.strftime('%Y-%m-%d %H:%M %Z')
+            context['day_of_week'] = day_of_week
     else:
         people = build_directory()
         posts, all_authors = get_matching_posts(people)
@@ -275,11 +330,12 @@ def main():
             'posts': posts,
             'all_authors': all_authors,
             'run_time': run_time_local.strftime('%Y-%m-%d %H:%M %Z'),
+            'day_of_week': day_of_week,
         }
         if DEMO_MODE:
             with open('./demo.pickle', 'wb') as f:
                 pickle.dump(context, f)
-    
+
     html_mailing, text_mailing = render_mailing(context)
     if DEMO_MODE:
         with open(os.path.join(HERE, 'mailing.html'), 'w') as f:
@@ -294,10 +350,10 @@ def main():
     to_addrs = [
         Address("StewarXiv", addr_spec=to_addr_spec)
     ]
-    subject = f'Today\'s update: {len(posts)} {"preprint" if len(posts) == 1 else "preprints"} from {len(all_authors)} {"colleague" if len(all_authors) == 1 else "colleagues"}'
+    subject = f'{day_of_week}\'s update: {len(posts)} {"preprint" if len(posts) == 1 else "preprints"} from {len(all_authors)} {"colleague" if len(all_authors) == 1 else "colleagues"}'
     msg = compose_email(from_addr, to_addrs, subject, html_mailing, text_mailing)
     # Send the email
-    if not DEMO_MODE:
+    if not DEMO_MODE and len(posts) > 0:
         send_email(msg)
 
     # Finally: hit the arxiv-vanity URL for each paper so their cache is

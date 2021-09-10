@@ -7,7 +7,7 @@
     {% set font_size_reg = 16 %}
     <body style="font-family: sans-serif; font-size: {{ font_size_reg }}px; line-height: {{ 1.25 * font_size_reg }}px;">
     {% set button_styles = "display: inline-block; box-sizing: border-box; border: 1px solid transparent; padding: 3px 6px;" %}
-    <p>Today's astro-ph arXiv update includes {% if posts|count == 1 %}one post{% else %}{{ posts|count }} posts{% endif %} featuring {{ all_authors|count }} of your colleagues.</p>
+    <p>Happy {{ day_of_week }}! Today's astro-ph arXiv update includes {% if posts|count == 1 %}one post{% else %}{{ posts|count }} posts{% endif %} featuring {{ all_authors|count }} of your colleagues.</p>
 
     {% for post in posts %}
     {% set area = post.area[1] %}
@@ -42,7 +42,10 @@
         {% include "author.jinja2.html" %}{% if not loop.last %},{% endif %}
         {% endfor %}
     </h2>
-    <p style="font-style: italic; font-size: {{ font_size_reg - 2}}px; word-wrap: break-word; text-align: justify; line-height: {{ font_size_reg - 1 }}px;">{{ post.abstract }}</p>
+    <details>
+        <summary><strong>Abstract</strong></summary>
+        <p style="font-size: {{ font_size_reg - 2}}px; word-wrap: break-word; margin-left: 1rem; padding-left: 1rem; border-left: 2px solid #666;">{{ post.abstract }}</p>
+    </details>
     {% endfor %}
     <hr>
     <p style="font-size: {{ font_size_reg - 4}}px; font-weight: normal; color: #444;">Generated at {{ run_time }}. Adjust options or unsubscribe at <a href="https://list.arizona.edu/sympa/info/astro-stewarxiv">https://list.arizona.edu/sympa/info/astro-stewarxiv</a>.</p>
