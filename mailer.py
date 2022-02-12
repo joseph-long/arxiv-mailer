@@ -120,7 +120,7 @@ def test_initial_regex():
     assert INITIAL_RE.match('J')
     assert INITIAL_RE.match('J D')
 
-ALL_INITIALS_RE = re.compile(r'\b\w\.')
+ALL_INITIALS_RE = re.compile(r'\b\w\.?')
 def strip_initials(names):
     return ' '.join(ALL_INITIALS_RE.sub('', names).split())
 def test_strip_initials():
@@ -147,10 +147,10 @@ def approximate_name_lookup(name, people):
                 score = 2
             elif first_names.startswith(person_first):
                 score = 2
-            elif first_names in person_first:
+            elif first_names != first_initial and first_names in person_first:
                 # first_names is a substring of person_first
                 # does person_first match after removing initials?
-                if strip_initials(person_first).startswith(first_names):
+                if strip_initials(first_names).startswith(person_first):
                     score = 2
             elif person_first in first_names:
                 # does first_names match after removing initials?
@@ -182,6 +182,17 @@ def test_approximate_name_lookup():
 
 UOFA_RE = re.compile(r'(university of arizona|steward observatory|arizona\.edu|lbto\.org|gmto\.org)', flags=re.IGNORECASE)
 
+def evidence_in_texfile(fh):
+    evidence = 0
+    for line in fh:
+        line = line.decode('utf8')
+        if line[0] == '%':
+            continue
+        matches = UOFA_RE.findall(line)
+        evidence += len(matches)
+    return evidence
+
+
 def gather_affiliation_evidence(arxiv_id):
     url = f'https://arxiv.org/e-print/{arxiv_id}'
     evidence = 0
@@ -192,13 +203,11 @@ def gather_affiliation_evidence(arxiv_id):
         buff = io.BytesIO(res.content)
         archive = tarfile.open(fileobj=buff)
         texfiles = [m for m in archive.getmembers() if m.name.lower().endswith('.tex')]
-
         for info in texfiles:
             fh = archive.extractfile(info)
-            contents = fh.read().decode('utf8')
-            matches = UOFA_RE.findall(contents)
-            evidence += len(matches)
+            evidence += evidence_in_texfile(fh)
         gather_success = True
+        log.info(f'Found {evidence=} for {arxiv_id=}')
     except Exception as e:
         log.debug(e)
     return evidence, gather_success
@@ -214,7 +223,8 @@ def unpack_feed_entry(post, people):
     our_people_score = sum(item[1][1] for item in authors)
     if our_people_score < 1:
         return
-
+    else:
+        log.info(f"Found {our_people_score=} from {authors=}")
     arxiv_id = post.link.rsplit('/', 1)[1]
     evidence, gather_success = gather_affiliation_evidence(arxiv_id)
     if gather_success and evidence == 0:
