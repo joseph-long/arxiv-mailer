@@ -7,7 +7,6 @@ import re
 import logging
 import sys
 import unicodedata
-from requests.exceptions import ReadTimeout
 import smtplib
 import ssl
 # https://stackoverflow.com/questions/33857698/sending-email-from-python-using-starttls
@@ -214,32 +213,31 @@ def gather_affiliation_evidence(arxiv_id):
 
 
 def unpack_feed_entry(post, people):
-    title, arxiv_id_ext, arxiv_area, update_kind = re.match(r'^(.+) \(arXiv:(.+) \[(.+)\](.*)\)', post.title).groups()
-    if len(update_kind):
-        # no 'UPDATED' posts, just new stuff please
-        return
+    title = post.title
+    arxiv_area = post.tags[0]['term']
     author_names = [x.text for x in BeautifulSoup(post.author, features="lxml").select('a')]
     authors = [(name, approximate_name_lookup(name, people)) for name in author_names]
     our_people_score = sum(item[1][1] for item in authors)
-    if our_people_score < 1:
+    if our_people_score < 1 and not DEMO_MODE:
         return
     else:
         log.info(f"Found {our_people_score=} from {authors=}")
     arxiv_id = post.link.rsplit('/', 1)[1]
-    evidence, gather_success = gather_affiliation_evidence(arxiv_id)
-    if gather_success and evidence == 0:
-        log.debug(f'Skipping {arxiv_id=} for lack of evidence: {our_people_score=} {evidence=}')
-        return  # no matches to UOFA_RE
-    elif not gather_success and our_people_score < 2:
-        return  # could be two partial matches
+    if not DEMO_MODE:
+        evidence, gather_success = gather_affiliation_evidence(arxiv_id)
+        if gather_success and evidence == 0:
+            log.debug(f'Skipping {arxiv_id=} for lack of evidence: {our_people_score=} {evidence=}')
+            return  # no matches to UOFA_RE
+        elif not gather_success and our_people_score < 2:
+            return  # could be two partial matches
     abstract = BeautifulSoup(post.summary, features="lxml").text
-    arxiv_area = arxiv_area.rsplit('.', 1)
     out = {
         'authors': authors,
         'title': title,
         'area': arxiv_area,
         'abstract': abstract.replace('\n', ' '),
         'arxiv_id': arxiv_id,
+        'html_arxiv_id': post.id.rsplit(':', 1)[1],
     }
     return out
 
@@ -365,15 +363,6 @@ def main():
     # Send the email
     if not DEMO_MODE and len(posts) > 0:
         send_email(msg)
-
-    # Finally: hit the arxiv-vanity URL for each paper so their cache is
-    # all warmed up
-    if not DEMO_MODE:
-        for post in posts:
-            try:
-                requests.get(f"https://www.arxiv-vanity.com/papers/{post['arxiv_id']}/", timeout=5)
-            except ReadTimeout:
-                pass
 
 if __name__ == "__main__":
     logging.basicConfig(level='WARN')

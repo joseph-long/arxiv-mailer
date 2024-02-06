@@ -10,32 +10,35 @@
     <p>Happy {{ day_of_week }}! Today's astro-ph arXiv update includes {% if posts|count == 1 %}one post{% else %}{{ posts|count }} posts{% endif %} featuring {{ all_authors|count }} of your colleagues.</p>
 
     {% for post in posts %}
-    {% set area = post.area[1] %}
-    {% if area == "GA" %}
+    {% set area = post.area %}
+    {% if area == "astro-ph.GA" %}
     {% set area_desc = "Galaxies" %}
     {% set area_color = "#4664AE" %}
-    {% elif area == "CO" %}
+    {% elif area == "astro-ph.CO" %}
     {% set area_desc = "Cosmology" %}
     {% set area_color = "#2FC0F1" %}
-    {% elif area == "EP" %}
+    {% elif area == "astro-ph.EP" %}
     {% set area_desc = "Earth & Planetary" %}
     {% set area_color = "#F15B2B" %}
-    {% elif area == "HE" %}
+    {% elif area == "astro-ph.HE" %}
     {% set area_desc = "High Energy" %}
     {% set area_color = "#C0D730" %}
-    {% elif area == "IM" %}
+    {% elif area == "astro-ph.IM" %}
     {% set area_desc = "Instrumentation & Methods" %}
     {% set area_color = "#6CC7BB" %}
-    {% elif area == "SR" %}
+    {% elif area == "astro-ph.SR" %}
     {% set area_desc = "Solar & Stellar" %}
     {% set area_color = "#EE2E2D" %}
+    {% else %}
+    {% set area_desc = area %}
+    {% set area_color = "#444444" %}
     {% endif %}
     <hr>
     <h1 style="font-size: {{ font_size_reg }}px;"><a href="https://arxiv.org/abs/{{ post.arxiv_id }}">{{ post.title }}</a></h1>
     <h2 style="font-size: {{ font_size_reg - 4}}px; font-weight: normal;">
     <a href="https://arxiv.org/list/astro-ph.{{ area }}/recent" style="{{ button_styles }} color: white; background-color: {{ area_color }};">{{ area_desc }}</a>
         <a href="https://arxiv.org/pdf/{{ post.arxiv_id }}" style="{{ button_styles }} border-color: {{ area_color }}; color: {{ area_color }}; background: #eee;">View PDF</a>
-        <a href="https://www.arxiv-vanity.com/papers/{{ post.arxiv_id }}/" style="{{ button_styles }} border-color: black; border-color: {{ area_color }}; color: {{ area_color }}; background: #eee;">Reformat for web</a>
+        <a href="https://arxiv.org/html/{{ post.html_arxiv_id }}" style="{{ button_styles }} border-color: black; border-color: {{ area_color }}; color: {{ area_color }}; background: #eee;">View HTML</a>
     </h2>
     <h2 style="font-weight: normal; font-size: {{ font_size_reg - 2}}px;">
         {% for author in post.authors %}
