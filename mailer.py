@@ -368,4 +368,8 @@ def main():
 if __name__ == "__main__":
     logging.basicConfig(level='WARN')
     log.setLevel('DEBUG')
+    # Set up a file to write the log
+    fh = logging.FileHandler(os.path.join(HERE, f'logs/{datetime.date.today()}.log'))
+    fh.setLevel('DEBUG')
+    log.addHandler(fh)
     main()
