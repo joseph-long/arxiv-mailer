@@ -7,3 +7,4 @@ __pycache__
 *.pickle
 test.sh
 run_mailer.sh
+logs/
