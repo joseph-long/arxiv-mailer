@@ -130,7 +130,7 @@ def approximate_name_lookup(name, people):
     normalized_name = normalize_caseless(name)
     name_match = NAME_RE.match(normalized_name)
     if not name_match:
-        log.warn(f"Unable to parse {normalized_name=} with regex")
+        log.warning(f"Unable to parse {normalized_name=} with regex")
         return None, 0
     parts = name_match.groupdict()
     first_names = parts['first'].strip()
@@ -215,7 +215,9 @@ def gather_affiliation_evidence(arxiv_id):
 def unpack_feed_entry(post, people):
     title = post.title
     arxiv_area = post.tags[0]['term']
-    author_names = [x.text for x in BeautifulSoup(post.author, features="lxml").select('a')]
+    # New arXiv RSS feed has a comma-separated author list instead of the a tag
+    author_names = [author.strip() for author in
+        BeautifulSoup(post.author, features="lxml").text.split(',')]
     authors = [(name, approximate_name_lookup(name, people)) for name in author_names]
     our_people_score = sum(item[1][1] for item in authors)
     if our_people_score < 1 and not DEMO_MODE:
@@ -230,7 +232,10 @@ def unpack_feed_entry(post, people):
             return  # no matches to UOFA_RE
         elif not gather_success and our_people_score < 2:
             return  # could be two partial matches
-    abstract = BeautifulSoup(post.summary, features="lxml").text
+    # The summary now also contains the arXiv ID and the type of posting (e.g.
+    # new, replacement) - just grab the abstract
+    summary = BeautifulSoup(post.summary, features="lxml").text
+    abstract = summary.split('Abstract: ')[-1]
     out = {
         'authors': authors,
         'title': title,
@@ -242,7 +247,7 @@ def unpack_feed_entry(post, people):
     return out
 
 def get_matching_posts(people):
-    feed = feedparser.parse('https://arxiv.org/rss/astro-ph')
+    feed = feedparser.parse('https://rss.arxiv.org/rss/astro-ph')
     posts = []
     all_authors = []
     update_day = parse(feed.feed['updated']).astimezone(datetime.timezone.utc).date()
@@ -261,6 +266,7 @@ def get_matching_posts(people):
     # sorting by the key, so by last names
     all_authors.sort()
     all_authors = [x[1] for x in all_authors]
+
     return posts, all_authors
 
 env = jinja2.Environment(
@@ -273,17 +279,21 @@ def render_mailing(context_dict):
     html_mailing = html_template.render(**context_dict)
     text_template = env.get_template('mailing.jinja2.txt')
     text_mailing = text_template.render(**context_dict)
+
     return html_mailing, text_mailing
 
 from email.message import EmailMessage
 from email.headerregistry import Address
 from email.utils import make_msgid
 
-def compose_email(from_address, to_addresses, subject, html_mailing, text_mailing):
+def compose_email(from_address, to_addresses, subject, html_mailing, text_mailing,
+    cc_addresses=None):
     msg = EmailMessage()
     msg['Subject'] = subject
     msg['From'] = from_address
     msg['To'] = to_addresses
+    if cc_addresses:
+        msg['CC'] = cc_addresses
     msg.set_content(text_mailing)
     msg.add_alternative(html_mailing, subtype='html')
     if DEMO_MODE:
@@ -359,7 +369,9 @@ def main():
         Address("StewarXiv", addr_spec=to_addr_spec)
     ]
     subject = f'{day_of_week}\'s update: {len(posts)} {"preprint" if len(posts) == 1 else "preprints"} from {len(all_authors)} {"colleague" if len(all_authors) == 1 else "colleagues"}'
-    msg = compose_email(from_addr, to_addrs, subject, html_mailing, text_mailing)
+    # Compose the email (also CC the sender of the email)
+    msg = compose_email(from_addr, to_addrs, subject, html_mailing, text_mailing,
+        cc_addresses=from_addr)
     # Send the email
     if not DEMO_MODE and len(posts) > 0:
         send_email(msg)
