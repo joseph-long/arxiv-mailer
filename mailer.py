@@ -119,7 +119,7 @@ def test_initial_regex():
     assert INITIAL_RE.match('J')
     assert INITIAL_RE.match('J D')
 
-ALL_INITIALS_RE = re.compile(r'\b\w\.?')
+ALL_INITIALS_RE = re.compile(r'\b\w\.?\s')
 def strip_initials(names):
     return ' '.join(ALL_INITIALS_RE.sub('', names).split())
 def test_strip_initials():
